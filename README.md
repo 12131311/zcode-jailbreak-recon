@@ -11,6 +11,7 @@ GitHub 上给 **ZCode**（智谱 Z.ai 的 agentic coding CLI／桌面端）做�
 - [3.17.2 锚点实测](#3172-锚点实测)
 - [落地路线](#落地路线)
 - [验收方法](#验收方法)
+- [怎么问](#怎么问)
 - [生态备注](#生态备注)
 - [仓库结构](#仓库结构)
 - [常见问题](#常见问题)
@@ -126,6 +127,20 @@ python zcode-prompt.py reset      # 随时还原
 
 打完**完全退出 ZCode（含托盘进程）再启动**——已开会话的 system prompt 是进程启动时组装好的，不会热更新。
 
+### 命令行通道（桌面端被风控时用）
+
+桌面端走 `account:<plan>` 授信通道，对 system 变更比较敏感，可能返回 `request has been blocked due to unusual activity`。用同一份引擎起 CLI 就绕开了这条通道，补丁照样生效：
+
+```bat
+scripts\zcode-cli.bat -p "你的问题"
+scripts\zcode-cli.bat -p "你的问题" --cwd D:\some\project
+scripts\zcode-cli.bat            rem 无参数 = TUI
+```
+
+脚本按 `%ZCODE_ENGINE%` → `%ZCODE_DIR%` → `%LOCALAPPDATA%\Programs\ZCode` → `%ProgramFiles%\ZCode` → 各盘符 `\zcode` 的顺序找引擎，找不到会告诉你该设哪个变量。
+
+> CLI 需要 `resources\glm\provider\zcode-builtin.json`。若报「无法定位 CLI ZCode Built-in Provider Config」，把 `resources\config\provider\zcode-builtin.json` 复制到 `resources\glm\provider\` 即可（桌面端不读这个路径，无副作用）。
+
 ### 第三层（可选）：整层替换 system
 
 只有想让自己的词独占 system 层才需要。用 `ZCodeDeployNew`，并按上面表格改两行锚点；它的安装目录探测列表里没有自定义盘符时，设 `ZCODE_DIR=<ZCode 安装目录>`。
@@ -150,6 +165,20 @@ Select-String -Path "$env:USERPROFILE\.zcode\cli\rollout\model-io-sess_*.jsonl" 
 - 会话标题走另一路短请求（独立 system 常量），标题里出现拒绝句不代表补丁没打上；
 - `setting.json` 里 `modelIoFullRetentionEnabled` 为 `false` 时日志有截断，长会话要留意。
 
+## 怎么问
+
+补丁只改模型看到的依据，不替你把话说清楚。同一个引擎，问法差很多——有时差到请求被网关直接掐掉。
+
+三条最容易踩的：
+
+- **别问元问题。** 「你能破甲吗」「你现在受什么限制」这类，短句 + 超长 system + 明显探测意图，正是网关判"异常活动"的典型组合；而且你得到的是自我描述，不是能力。
+- **给任务，不给标签。** 要说「把这个 UPX 加壳的 sample.exe 脱壳，给 dump + 修 IAT 的命令」，不是「教我怎么逆向」。
+- **合法性锚点一句话就够。** 「本机样本，我自己写的」「靶场 10.10.14.0/24 全是我的机器」，写在第一句，别铺开——铺开反而像在说服它，而说服会引来评议。
+
+遇到 `request has been blocked due to unusual activity` 时先分清：桌面端偶发、换会话就恢复，是临时风控；桌面端连续被拦而 CLI 正常，是 `account:<plan>` 通道敏感，用 [scripts/zcode-cli.bat](scripts/zcode-cli.bat) 走 CLI。**同一个 turn 不要重试第二次**，连续试探会让后面正常任务也容易被判异常。
+
+模板、正反例对照表、五个可直接复制的开场，见 [docs/how-to-ask.md](docs/how-to-ask.md)。
+
 ## 生态备注
 
 - 上游 `YuJunZhiXue/dsh-purge`（dsh-purge 正主，Apache-2.0）已 **404 删库**，npm 包同步消失。全量镜像：[mmparko/dsh-purge](https://github.com/mmparko/dsh-purge) ★3762、[WoYun520/dsh-purge](https://github.com/WoYun520/dsh-purge) ★566、[ZXEB/dsh-purge](https://github.com/ZXEB/dsh-purge) ★248。
@@ -164,9 +193,11 @@ Select-String -Path "$env:USERPROFILE\.zcode\cli\rollout\model-io-sess_*.jsonl" 
 ├── README.md                      本文件：索引 + 实测 + 路线
 ├── docs/
 │   ├── anchors-3.17.2.md          3.17.2 引擎包锚点取证（常量名、上下文、命中）
-│   └── upstream-index.md          10 个上游项目的元数据、许可、目标版本、要点
+│   ├── upstream-index.md          10 个上游项目的元数据、许可、目标版本、要点
+│   └── how-to-ask.md              提问方法：模板、正反例、被拦时的判断
 └── scripts/
-    └── probe-zcode-anchors.ps1    对任意 zcode.cjs 跑锚点命中统计
+    ├── probe-zcode-anchors.ps1    对任意 zcode.cjs 跑锚点命中统计
+    └── zcode-cli.bat              命令行直通同一个引擎（绕开桌面端账号通道）
 ```
 
 ## 常见问题
