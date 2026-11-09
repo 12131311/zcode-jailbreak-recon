@@ -13,6 +13,7 @@ GitHub 上给 **ZCode**（智谱 Z.ai 的 agentic coding CLI／桌面端）做�
 - [验收方法](#验收方法)
 - [生态备注](#生态备注)
 - [仓库结构](#仓库结构)
+- [常见问题](#常见问题)
 
 ## 结论先看
 
@@ -167,6 +168,46 @@ Select-String -Path "$env:USERPROFILE\.zcode\cli\rollout\model-io-sess_*.jsonl" 
 └── scripts/
     └── probe-zcode-anchors.ps1    对任意 zcode.cjs 跑锚点命中统计
 ```
+
+## 常见问题
+
+**`git push` 报 `could not read Username for 'https://ghfast.top'`**
+
+机器上很可能有把 GitHub 改写进镜像的全局规则：
+
+```powershell
+git config --global --get-regexp 'url\..*\.insteadof'
+# url.https://ghfast.top/https://github.com/.insteadof https://github.com/
+```
+
+镜像用于加速 `clone`／`fetch`，但**不支持带认证的 push**。三种处理：
+
+```powershell
+# A. 干脆去掉这条规则
+git config --global --unset url.https://ghfast.top/https://github.com/.insteadOf
+
+# B. 只在这一条命令里绕过：用一份临时全局配置
+copy $env:USERPROFILE\.gitconfig $env:TEMP\g
+git config --file $env:TEMP\g --remove-section 'url.https://ghfast.top/https://github.com/'
+$env:GIT_CONFIG_GLOBAL = "$env:TEMP\g"
+git push
+Remove-Item Env:\GIT_CONFIG_GLOBAL
+
+# C. 改用 SSH remote（不受 https 改写影响，需先在 GitHub 配公钥）
+git remote set-url origin git@github.com:<user>/<repo>.git
+```
+
+**中文输出乱码 / PowerShell 报 `Unexpected token`**
+
+Windows PowerShell 5.1 对无 BOM 的脚本按系统 ANSI 解码，会把中文字节连同后面的引号一起吃掉。脚本一律存成 **UTF-8 with BOM**（本仓库的 `probe-zcode-anchors.ps1` 已经是）。VS Code 里设 `"files.encoding": "utf8bom"`。
+
+**ZCode 更新后补丁没效果了**
+
+更新会覆盖 `zcode.cjs`，引擎层补丁全丢。重跑 `probe-zcode-anchors.ps1` 看锚点还在不在，再决定是重打还是换锚点；规则层（`AGENTS.md`）和 hook 不受影响。
+
+**模型把 `AGENTS.md` 说成"本机偏好"然后不照做**
+
+这是 `AGENTS.md` 通道的天花板：它被归类为"文件"，不是系统提示词。要么配 `SessionStart`／`UserPromptSubmit` hook 每轮刷新，要么改用引擎层补丁。
 
 ## 免责
 
